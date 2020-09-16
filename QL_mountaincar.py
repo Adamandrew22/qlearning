@@ -6,27 +6,25 @@ import numpy as np
 import pandas as pd
 import datetime
 
-# THIS WORKS BUT MOSTLY HARDCODED. QUESTIONS:
+# THIS WORKS BUT MOSTLY HARDCODED.
+# QUESTIONS:
 
-# what am i trying to optimise?
 # how can i view an overall score over time? (learning curve / convergence)
 # how can i implement early stopping and how to decide when?
-# need to incorporate an epsilon value to introduce random exploratory actions
-
-
 
 # user params
 learning_rate = 0.1 # multplier for weighting rate of change
 discount = 0.95 # weighting between current vs future reward
-episodes = 5000 # something big
+episodes = 20000 # something big
 
-epsilon = 0.5
+# a quick note on epsilon:
+# epsilon is introduced as a probability of taking random actions
+# the probability decays (reduces) according to the start and stop episodes
+epsilon = 0
 epsilon_start_pos = 1
-epsilon_end_pos = 1000
+epsilon_end_pos = (episodes + 1) // 2
 epsilon_decay_val = epsilon / (epsilon_end_pos / epsilon_start_pos)
-showable = 500
-
-
+showable = 200
 
 env = gym.make("MountainCar-v0")
 env.reset()
@@ -45,9 +43,17 @@ def get_discrete_state(state):
     discrete_state = (state - low_vals) / discrete_os_size_win
     return tuple(discrete_state.astype(np.int))
 
+discrete_state = get_discrete_state(env.reset())
+success = False
+counter = 0
+current_best = 10000
+worst_moves = 200
 
-for episode in range(episodes):
-    print("Episode N: {}".format(episode))
+for episode in range(episodes + 1):
+
+    print("Episode N: {} Epsilon value: {:.5f} State: {} Success: {} Best: {:.4f}".format(
+        episode, epsilon, discrete_state, success, current_best/worst_moves))
+
     if episode % showable == 0:
         will_render = True
     else:
@@ -55,12 +61,14 @@ for episode in range(episodes):
         
     # this is all one episode, taking 200 steps.
     discrete_state = get_discrete_state(env.reset())
-    done = False
+    done, success = False, False
+    counter = 0
     while not done:
+        counter += 1
         if np.random.random() > epsilon:
             action = np.argmax(q_table[discrete_state])
         else:
-            action = np.randm.randint(0, n_actions)
+            action = np.random.randint(0, n_actions)
         new_state, reward, done, _ = env.step(action)
         new_discrete_state = get_discrete_state(new_state)
         if will_render == True:
@@ -71,11 +79,13 @@ for episode in range(episodes):
             new_q = (1 - learning_rate) * current_q + learning_rate * (reward + discount * max_future_q)
             q_table[discrete_state + (action, )] = new_q
         elif new_state[0] >= goal_state[0]:
+            success = True
             q_table[discrete_state + (action, )] = 0
         
         discrete_state = new_discrete_state
-    
-    if epsilon_end_pos >= episode >= epsilon_start_pos:
+    if counter < current_best:
+        current_best = counter
+    if epsilon_end_pos >= episode >= epsilon_start_pos and epsilon > 0:
         epsilon -= epsilon_decay_val
         
 env.close()
